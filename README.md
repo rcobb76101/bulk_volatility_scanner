@@ -5,10 +5,18 @@ Python script to run battery of Volatility plugins against a forensic memory ima
 
 Syntax:
 
-python bulk_volatility_scanner.py [memory image] [memory profile] [list of plugins]
+python bulk_volatility_scanner.py --help
+usage: bulk_volatility_scanner.py [-h] imagefile profile pluginfile
 
-The [list of plugins] is a line-deliminated unix text file containing volatility plugin names, ie:
-  pstree
-  pslist
-  netscan
-etc.
+Subject a target memory image to a battery of volatility plugins.
+
+positional arguments:
+  imagefile   Memory image
+  profile     Volatility profile
+  pluginfile  Plugin file
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+The plugin file contains line-delimited Volatility plugin commands.
+
