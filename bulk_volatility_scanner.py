@@ -41,13 +41,16 @@ try:
 
 #primary execution loop for plugins
         for plugin in open(plugin_file):
-                print "Plugin: " + plugin.rstrip() + " in progress"
-                output_filename = plugin.rstrip() + ".txt"
-                output_file = open(os.path.join(directory_filename, output_filename), "w")
-                subprocess.call(["vol.py", "-f", image_file, "--profile="+profile, plugin.rstrip()], stdout=output_file)
-                print "Plugin: " + plugin.rstrip() + " completed"
-                print "Output saved to %s/%s" % (directory_filename, output_filename)
-                print "\n"
+                try:
+                        print "Plugin: " + plugin.rstrip() + " in progress"
+                        output_filename = plugin.rstrip() + ".txt"
+                        output_file = open(os.path.join(directory_filename, output_filename), "w")
+                        subprocess.call(["vol.py", "-f", image_file, "--profile="+profile, plugin.rstrip()], stdout=output_file)
+                        print "Plugin: " + plugin.rstrip() + " completed"
+                        print "Output saved to %s/%s" % (directory_filename, output_filename)
+                        print "\n"
+                except:
+                        print 'Incompatible plugin? Check your profile.'
 
         print "Bulk processing complete. Exiting gracefully."
 except:
