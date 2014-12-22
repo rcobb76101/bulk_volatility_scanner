@@ -1,22 +1,21 @@
 bulk_volatility_scanner
 =======================
 
-Python script to run battery of Volatility plugins against a forensic memory image
+Run all available Volatility plugins on a target image file.
 
 Syntax:
 
 python bulk_volatility_scanner.py --help
-usage: bulk_volatility_scanner.py [-h] imagefile profile pluginfile
-
-Subject a target memory image to a battery of volatility plugins.
+usage: bulk_volatility_scanner.py [-h] imagefile outputdirectory
 
 positional arguments:
-  imagefile   Memory image
-  profile     Volatility profile
-  pluginfile  Plugin file
+  imagefile           Memory image
+  outputdirectory     Volatility profile
 
 optional arguments:
   -h, --help  show this help message and exit
 
-The plugin file contains line-delimited Volatility plugin commands.
-
+The first suggested profile will be automatically selected.
+All available plugins will be selected for the suggested profile.
+If the output directory does not exist, it will be created.
+The output files with follow a $plugin_$filename format.
