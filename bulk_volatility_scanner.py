@@ -124,14 +124,18 @@ class MemoryImage(object):
 		self.kdbg = kdbg
 		self.valid_plugins = []
 
+		# Test for existence of output directory
 		if not os.path.exists(self.output_directory):
 			os.makedirs(self.output_directory)  
 		    
+		# If the provided profile is invalid, exit program
 		if self.profile:
 			if not self.profile in ALL_PROFILES:
 				logging.error('[{0}] Invalid profile {1} selected'.format(self.basename, args.profile))
 				sys.exit()
 
+		# If either the profile or the kdbg offset are not provided,
+		# initiate imageinfo plugin.
 		if not self.profile or not self.kdbg:
 			output_filename = 'imageinfo_' +  self.basename
 			output_path = os.path.join(self.output_directory, output_filename)
@@ -147,9 +151,11 @@ class MemoryImage(object):
 			kdbg_regex = re.search('KDBG : ([^\n]*)', data)
 			auto_kdbg = kdbg_regex.group(1)
 
+		# If not already provided, select the first suggested profile
 		if not self.profile:
 			self.profile = auto_profiles[0]
 		
+		# If not already provided, select the first returned kdbg offset
 		if not self.kdbg:
 			self.kdbg = auto_kdbg
 
@@ -170,6 +176,25 @@ class MemoryImage(object):
 		for plugin in self.valid_plugins:
 			logging.info('[{0}] Queuing plugin: {1}'.format(self.basename, plugin.strip('\n')))
 
+def generate_future_tasks(image):
+	for plugin in image.valid_plugins:
+		if len(plugin.split(' ')) > 1:
+			plugin_name = plugin.split(' ')[0].strip('\n')
+			plugin_flags = [arg.strip('\n') for arg in plugin.split(' ')[1:]]
+		else:
+			plugin_name = plugin.strip('\n')
+			plugin_flags = []
+
+		output_filename = plugin_name + '_' +  image.basename + '.txt'
+		output_path = os.path.join(image.output_directory, output_filename)
+
+		commandline = [invocation, '-f', image.abspath, '--profile=' + profile, '--kdbg=' + image.kdbg, plugin_name]
+		commandline += plugin_flags
+
+		yield {'image_basename': image.basename, 
+			   'plugin_name': plugin_name, 
+			   'commandline': commandline, 
+			   'output_path': output_path}
 
 def execute_plugin(command):
 	logging.info('[{0}] Running Plugin: {1}'.format(command['image_basename'],
@@ -188,18 +213,18 @@ if __name__ == '__main__':
 			All available plugins will be selected for the suggested profile.
 			If the output directory does not exist, it will be created.
 			The output files with follow a $plugin_$filename format.''')
-	parser.add_argument('--invocation', help='Provide the desired invocation to execute Volatility')
-	parser.add_argument('--readlist', help='Flag to read from a list of plugins rather than using the default')
-	parser.add_argument('--profile', help='Provide a valid profile and bypass auto-detection')
-	parser.add_argument('--kdbgoffset', help='Provide a valid kdbg offset and bypass auto-detection')
-	parser.add_argument('output_directory', help='Path to output direcctory')
+	parser.add_argument('--invocation', help='Provide the desired invocation to execute Volatility. Defaults to "vol.py".')
+	parser.add_argument('--readlist', help='Flag to read from a list of plugins rather than auto-detecting valid plugins.')
+	parser.add_argument('--profile', help='Provide a valid profile and bypass auto-detection.')
+	parser.add_argument('--kdbgoffset', help='Provide a valid kdbg offset and bypass auto-detection.')
+	parser.add_argument('output_directory', help='Path to output direcctory.')
 	parser.add_argument('imagefiles', help='Path to memory image(s)', nargs='+')
 	args = parser.parse_args()
 
 	if args.invocation:
 		invocation = args.invocation
 	else:
-		invocation = 'vol.exe'
+		invocation = 'vol.py'
 
 	master_output_directory = os.path.abspath(args.output_directory)
 	if not os.path.exists(master_output_directory):
@@ -208,48 +233,34 @@ if __name__ == '__main__':
 	profile = args.profile
 	kdbg = args.kdbgoffset
 	plugins_list = args.readlist
-	commands = []
+
+	tasks = []
+	workers = []
 
 	for image_path in args.imagefiles:
-
 		image = MemoryImage(invocation, image_path, profile, kdbg, 
 			master_output_directory, plugins_list)
+		tasks.extend([task for task in generate_future_tasks(image)])
 
-		for plugin in image.valid_plugins:
-			if len(plugin.split(' ')) > 1:
-				plugin_name = plugin.split(' ')[0].strip('\n')
-				plugin_flags = [arg.strip('\n') for arg in plugin.split(' ')[1:]]
-			else:
-				plugin_name = plugin.strip('\n')
-				plugin_flags = []
-
-			output_filename = plugin_name + '_' +  image.basename + '.txt'
-			output_path = os.path.join(image.output_directory, output_filename)
-
-			commandline = [invocation, '-f', image.abspath, '--profile=' + profile, '--kdbg=' + image.kdbg, plugin_name]
-			commandline += plugin_flags
-
-			commands.append({
-				'image_basename': image.basename, 
-				'plugin_name': plugin_name, 
-				'commandline': commandline, 
-				'output_path': output_path})
-
-	workers = []
 	while True:
 		logging.debug('Active Workers: {0}, Pending Tasks: {1}'.format(
-			len(workers), len(commands)))
+			len(workers), len(tasks)))
 
-		if len(commands) == 0 and len(workers) == 0:
+		if len(tasks) == 0 and len(workers) == 0:
+			# If there are no more pending tasks and all 
+			# workers are done processing, then end the script.
 			break
 		try:
-			if len(commands) > 0 and len(workers) < 4:
-				command = commands.pop()
+			if len(tasks) > 0 and len(workers) < 6:
+				# If there are more pending tasks and 
+				# the max number of active workers has 
+				# not been reached, start the new task.
+				command = tasks.pop()
 				worker = multiprocessing.Process(target=execute_plugin, args=(command,))
 				workers.append({
 					'plugin_name': command['plugin_name'], 
-					'task': worker,
-					'image_basename': command['image_basename']})
+					'image_basename': command['image_basename'],
+					'task': worker})
 				worker.start()
 			else:
 				time.sleep(5)
